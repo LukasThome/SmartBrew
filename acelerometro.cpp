@@ -1,6 +1,7 @@
 #includue <stdio.h>
 
-int main () {
+int main () 
+{
 	
 	float mediaVetor = 0;
 	float somaVetor = 0;
