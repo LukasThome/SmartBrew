@@ -10,23 +10,15 @@ int main () {
 	//Guarda as 20 leituras do eixo x em um vetor
 	for (i = 0; i < 20; i++)
 	{
-
 	eixoX[i] = 	analogRead(X);
-	
-	
 	}
 	//Soma as 20 leituras do eixo X
 	for (i = 0; i < 20; i++){
-		
-		somaVetor = eixoX[i] + somaVetor;
-		
+	somaVetor = eixoX[i] + somaVetor;	
 	}
-
-	//Faz a media das 20 leituras do eixo x
-	for(i = 0; i < 20; i++){
-		
-		mediaVetor = somaVetor/20;
-	}
+	//Faz a media das 20 leituras do eixo 	
+	mediaVetor = somaVetor/20;
+	
 
 
 }
