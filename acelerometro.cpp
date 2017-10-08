@@ -11,7 +11,7 @@ int main ()
 	//Guarda as 20 leituras do eixo x em um vetor
 	for (i = 0; i < 20; i++)
 	{
-	eixoX[i] = 	analogRead(X);
+	eixoX[i] = analogRead(X);
 	}
 	//Soma as 20 leituras do eixo X
 	for (i = 0; i < 20; i++){
