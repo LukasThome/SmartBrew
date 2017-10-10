@@ -12,9 +12,6 @@ float leituraInicial = 0;
 float leituraAtual = 0;
 float variacao = 0;
 	
-
-
-
 //Função que retornará a diferença de duas leituras de um eixo qualquer escolhido
 float variacaoEixo(float eixo)
 {
@@ -55,16 +52,3 @@ variacao(eixoX);
 	
 }
 	
-	
-	
-	
-//Verifica se os demais eixos estão não estão variando, impedindo que ocorra uma leitura errada da densidade caso alguem balance ou 
-//toque no recipiente do mosto
-	
-
-	
-
-
-}
-
-
