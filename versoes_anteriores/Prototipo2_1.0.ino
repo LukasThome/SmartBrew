@@ -28,10 +28,8 @@ int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
 const char* SSID = "arduino";
 const char* PASSWORD = "12341234";
 WiFiServer server(80);
-
   
 WiFiClient client;
-char c = client.read();
 
 void initI2C() 
 {
@@ -239,31 +237,10 @@ void setup() {
   initMPU();
   checkMPU(MPU_ADDR);
     
-  // Starting the web server
-  server.begin();
-  Serial.println("Web server running. Waiting for the ESP IP...");
-  delay(10000);
-  
-  // Printing the ESP IP address
-  Serial.println(WiFi.localIP());
 }
-
 void loop() {
 
-  // Listenning for new clients
-  WiFiClient client = server.available();
-  
-  if (client) {
-    Serial.println("New client");
-    // bolean to locate when the http request ends
-    boolean blank_line = true;
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        
-        if (c == '\n' && blank_line) {
-            //Leitura dos sensores
-             readRawMPU();    // lê os dados do sensor
+  readRawMPU();    // lê os dados do sensor
 
         for(i = 0; i < 300;i++){         
            leiturasEixoY[i] = AcY;
@@ -283,19 +260,19 @@ void loop() {
             mediaLeiturasY = mediaLeiturasY / 100;
             mediaLeiturasZ = somaLeiturasZ/300;
             mediaLeiturasZ = mediaLeiturasZ / 100;
-            /*
+            
             Serial.print("Media eixo Y = ");
             Serial.println(mediaLeiturasY);
             Serial.print("Media eixo X = ");
             Serial.println(mediaLeiturasX);
             Serial.print("Media eixo Z = ");
             Serial.println(mediaLeiturasZ);
-            */
+            
             somaLeiturasY = 0;
             somaLeiturasX = 0;
             somaLeiturasZ = 0;
   
-       //Serial.print("Temperatura Cº "); Serial.println(Tmp/340.00+36.53);
+       Serial.print("Temperatura Cº "); Serial.println(Tmp/340.00+36.53);
             
             
        anguloyxz = mediaLeiturasY/(sqrt( pow (mediaLeiturasX, 2) + (mediaLeiturasZ, 2)));
@@ -305,57 +282,7 @@ void loop() {
        Serial.println( anguloyxz);
        Serial.print("Angulo em RAD =  ");
        Serial.println(angulo);
-                          
-       delay(100);  
-                    
-       }
-            
-        else{
-              
-              // You can delete the following Serial.print's, it's just for debugging purposes
-              Serial.print("Eixo X ");
-              Serial.print(mediaLeiturasX);
-              Serial.print("Eixo Y ");
-              Serial.print(mediaLeiturasY);
-              Serial.print("Eixo Z ");
-              Serial.print(mediaLeiturasZ);
-              Serial.print(" %\t Temperatura: ");
-              Serial.print(Tmp/340.00+36.53);
-              Serial.print(" *C ");
-            }
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-Type: text/html");
-            client.println("Connection: close");
-            client.println();
-            // your actual web page that displays temperature and humidity
-            client.println("<!DOCTYPE HTML>");
-            client.println("<html>");
-            client.println("<head></head><body><h1>ESP8266 - Temperatura</h1><h3>Temperatura em Celsius: ");
-            client.println(Tmp/340.00+36.53);
-            client.println("*C</h3><h3>Eixo X ");
-            client.println(mediaLeiturasX);
-            client.println("*C</h3><h3>Eixo Y");
-            client.println(mediaLeiturasY);
-            client.println("*C</h3><h3>Eixo Z");
-            client.println(mediaLeiturasZ);
+                        
+delay(100);  
 
-            client.println("%</h3><h3>");
-            client.println("</body></html>");     
-            break;
-        }
-        if (c == '\n') {
-          // when starts reading a new line
-          blank_line = true;
-        }
-        else if (c != '\r') {
-          // when finds a character on the current line
-          blank_line = false;
-        }
-      }
-    }  
-    // closing the client connection
-    delay(1);
-    client.stop();
-    Serial.println("Client disconnected.");
-  }  
-  
+}

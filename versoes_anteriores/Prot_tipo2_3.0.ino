@@ -1,7 +1,7 @@
-
 #include <ESP8266WiFi.h> // biblioteca para usar as funções de Wifi do módulo ESP8266
 #include <Wire.h>         // biblioteca de comunicação I2C
-#include <math.h>
+#include "UbidotsESPMQTT.h"
+
 /*
  * Definições de alguns endereços mais comuns do MPU6050
  * os registros podem ser facilmente encontrados no mapa de registros do MPU6050
@@ -20,7 +20,7 @@ int i, eixo;
 float leiturasEixoY[300] = {}, mediaLeiturasX = 0, somaLeiturasX = 0, variacao = 0, valorAtual = 0; 
 float valorInicial = 0, leiturasEixoX[300], leiturasEixoZ[300],somaLeiturasZ = 0, somaLeiturasY = 0;  
 float mediaLeiturasZ, mediaLeiturasY;
-float anguloyxz, angulo, anguloGraus, anguloX,anguloY;
+float anguloyxz, angulo;
 
 // variáveis para armazenar os dados "crus" do acelerômetro
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ; 
@@ -28,11 +28,22 @@ int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
 // Definições da rede Wifi
 const char* SSID = "arduino";
 const char* PASSWORD = "12341234";
-WiFiServer server(80);
+#define TOKEN "A1E-JgJo2giIkhBmYGQ1fHHTAfqfeMT4XJ"
 
-  
+Ubidots client(TOKEN);
+
+WiFiServer server(80); 
 WiFiClient client;
+
 char c = client.read();
+
+
+
+void callback(char* topic, byte* playload, unsigned int  length) {
+  
+}
+
+
 
 void initI2C() 
 {
@@ -247,6 +258,9 @@ void setup() {
   
   // Printing the ESP IP address
   Serial.println(WiFi.localIP());
+  
+  client.ubidotsSubscribe("esp8266", "densidade");
+
 }
 
 void loop() {
@@ -301,15 +315,32 @@ void loop() {
             mediaLeiturasY = mediaLeiturasY / 100;
             mediaLeiturasZ = somaLeiturasZ/300;
             mediaLeiturasZ = mediaLeiturasZ / 100;
-           
+            /*
+            Serial.print("Media eixo Y = ");
+            Serial.println(mediaLeiturasY);
+            Serial.print("Media eixo X = ");
+            Serial.println(mediaLeiturasX);
+            Serial.print("Media eixo Z = ");
+            Serial.println(mediaLeiturasZ);
+            */
             somaLeiturasY = 0;
             somaLeiturasX = 0;
             somaLeiturasZ = 0;
   
-       anguloX = atan2 (-mediaLeiturasY,-mediaLeiturasZ)   * 57.2957795 + 180;
-    
+       //Serial.print("Temperatura Cº "); Serial.println(Tmp/340.00+36.53);
+            
+            
+       anguloyxz = mediaLeiturasY/(sqrt( pow (mediaLeiturasX, 2) + (mediaLeiturasZ, 2)));
+       angulo = atan(anguloyxz);  
+            
+       Serial.print("Tangente =  ");
+       Serial.println( anguloyxz);
+       Serial.print("Angulo em RAD =  ");
+       Serial.println(angulo);
                           
        delay(100);  
+            
+            
             
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
@@ -326,15 +357,26 @@ void loop() {
             client.println(mediaLeiturasY);
             client.println("</h3><h3>Eixo Z");
             client.println(mediaLeiturasZ);
-           
-            client.println("</h3><h3>Angulo");
-            client.println(anguloX);
-          
-
-
-           
+            client.println("</h3><h3>Tangente");
+            client.println(anguloyxz); 
+            client.println("</h3><h3>Angulo em RAD");
+            client.println(angulo);
             client.println("</h3><h3>");
             client.println("</body></html>");     
+            
+            //Publicar dados em Ubidots
+
+            client.add("stuff",Tmp/340.00+36.53);
+            client.ubidotsPublish("Temperatura em Cº");
+            client.add("stuff",anguloyxz);
+            client.ubidotsPublish("Tangente");
+            client.add("stuff", angulo);
+            client.ubidotsPublish("Angulo em RAD");
+            client.loop(); 
+            
+            
+            
+            
             break;
         }
         if (c == '\n') {

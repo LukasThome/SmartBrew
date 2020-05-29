@@ -1,10 +1,11 @@
+
 #include <ESP8266WiFi.h> // biblioteca para usar as funções de Wifi do módulo ESP8266
 #include <Wire.h>         // biblioteca de comunicação I2C
+#include <math.h>
 
-/*
- * Definições de alguns endereços mais comuns do MPU6050
- * os registros podem ser facilmente encontrados no mapa de registros do MPU6050
- */
+//Definições de alguns endereços mais comuns do MPU6050
+//os registros podem ser facilmente encontrados no mapa de registros do MPU6050
+
 const int MPU_ADDR =      0x68; // definição do endereço do sensor MPU6050 (0x68)
 const int WHO_AM_I =      0x75; // registro de identificação do dispositivo
 const int PWR_MGMT_1 =    0x6B; // registro de configuração do gerenciamento de energia
@@ -18,28 +19,28 @@ const int scl_pin = D6; // definição do pino I2C SCL
 int i, eixo;
 float leiturasEixoY[300] = {}, mediaLeiturasX = 0, somaLeiturasX = 0, variacao = 0, valorAtual = 0; 
 float valorInicial = 0, leiturasEixoX[300], leiturasEixoZ[300],somaLeiturasZ = 0, somaLeiturasY = 0;  
-float mediaLeiturasZ, mediaLeiturasY;
-float anguloyxz, angulo;
+float mediaLeiturasZ, mediaLeiturasY,anguloyxz, angulo, anguloGraus, anguloX,anguloY, plato,sg;
 
 // variáveis para armazenar os dados "crus" do acelerômetro
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ; 
 
+
 // Definições da rede Wifi
 const char* SSID = "arduino";
 const char* PASSWORD = "12341234";
-WiFiServer server(80);
-  
+String apiKey = "QNP3RKUA47KWRMSJ"; //API key  ThingSpeak channel
+
+const char* server = "api.thingspeak.com";
 WiFiClient client;
 
+//Iniciar a comunicação I2C para os pinos declarados D5 e D6
 void initI2C() 
 {
-  //Serial.println("---inside initI2C");
   Wire.begin(sda_pin, scl_pin);
 }
 
-/*
- * função que escreve um dado valor em um dado registro
- */
+//função que escreve um dado valor em um dado registro
+ 
 void writeRegMPU(int reg, int val)      //aceita um registro e um valor como parâmetro
 {
   Wire.beginTransmission(MPU_ADDR);     // inicia comunicação com endereço do MPU6050
@@ -48,9 +49,7 @@ void writeRegMPU(int reg, int val)      //aceita um registro e um valor como par
   Wire.endTransmission(true);           // termina a transmissão
 }
 
-/*
- * função que lê de um dado registro
- */
+//função que lê de um dado registro
 uint8_t readRegMPU(uint8_t reg)        // aceita um registro como parâmetro
 {
   uint8_t data;
@@ -62,9 +61,7 @@ uint8_t readRegMPU(uint8_t reg)        // aceita um registro como parâmetro
   return data;                          //retorna 'data'
 }
 
-/*
- * função que procura pelo sensor no endereço 0x68
- */
+// função que procura pelo sensor no endereço 0x68
 void findMPU(int mpu_addr)
 {
   Wire.beginTransmission(MPU_ADDR);
@@ -81,9 +78,7 @@ void findMPU(int mpu_addr)
   }
 }
 
-/*
- * função que verifica se o sensor responde e se está ativo
- */
+//função que verifica se o sensor responde e se está ativo
 void checkMPU(int mpu_addr)
 {
   findMPU(MPU_ADDR);
@@ -102,9 +97,7 @@ void checkMPU(int mpu_addr)
   else Serial.println("Verifique dispositivo - MPU6050 NÃO disponível!");
 }
 
-/*
- * função de inicialização do sensor
- */
+// função de inicialização do sensor
 void initMPU()
 {
   setSleepOff();
@@ -112,64 +105,30 @@ void initMPU()
   setAccelScale();
 }
 
-/* 
- *  função para configurar o sleep bit  
- */
+//função para configurar o sleep bit  
+
 void setSleepOff()
 {
   writeRegMPU(PWR_MGMT_1, 0); // escreve 0 no registro de gerenciamento de energia(0x68), colocando o sensor em o modo ACTIVE
 }
 
-/* função para configurar as escalas do giroscópio
-   registro da escala do giroscópio: 0x1B[4:3]
-   0 é 250°/s
-    FS_SEL  Full Scale Range
-      0        ± 250 °/s      0b00000000
-      1        ± 500 °/s      0b00001000
-      2        ± 1000 °/s     0b00010000
-      3        ± 2000 °/s     0b00011000
-*/
+
 void setGyroScale()
 {
+  //configura a escla que o giroscópio vai trabalhar
   writeRegMPU(GYRO_CONFIG, 0);
 }
 
-/* função para configurar as escalas do acelerômetro
-   registro da escala do acelerômetro: 0x1C[4:3]
-   0 é 250°/s
-    AFS_SEL   Full Scale Range
-      0           ± 2g            0b00000000
-      1           ± 4g            0b00001000
-      2           ± 8g            0b00010000
-      3           ± 16g           0b00011000
-*/
 void setAccelScale()
 {
+  //configura a escla que o acelerômetro vai trabalhar
   writeRegMPU(ACCEL_CONFIG, 0);
 }
 
-/* função que lê os dados 'crus'(raw data) do sensor
-   são 14 bytes no total sendo eles 2 bytes para cada eixo e 2 bytes para temperatura:
-  0x3B 59 ACCEL_XOUT[15:8]
-  0x3C 60 ACCEL_XOUT[7:0]
-  0x3D 61 ACCEL_YOUT[15:8]
-  0x3E 62 ACCEL_YOUT[7:0]
-  0x3F 63 ACCEL_ZOUT[15:8]
-  0x40 64 ACCEL_ZOUT[7:0]
-  0x41 65 TEMP_OUT[15:8]
-  0x42 66 TEMP_OUT[7:0]
-  0x43 67 GYRO_XOUT[15:8]
-  0x44 68 GYRO_XOUT[7:0]
-  0x45 69 GYRO_YOUT[15:8]
-  0x46 70 GYRO_YOUT[7:0]
-  0x47 71 GYRO_ZOUT[15:8]
-  0x48 72 GYRO_ZOUT[7:0]
-   
-*/
 void readRawMPU()
 {  
   Wire.beginTransmission(MPU_ADDR);       // inicia comunicação com endereço do MPU6050
-  Wire.write(ACCEL_XOUT);                       // envia o registro com o qual se deseja trabalhar, começando com registro 0x3B (ACCEL_XOUT_H)
+  Wire.write(ACCEL_XOUT);                 // envia o registro com o qual se deseja trabalhar, começando com registro 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);            // termina transmissão mas continua com I2C aberto (envia STOP e START)
   Wire.requestFrom(MPU_ADDR, 14);         // configura para receber 14 bytes começando do registro escolhido acima (0x3B)
 
@@ -192,97 +151,124 @@ void readRawMPU()
                                 
 }
 
-/*
- * função que conecta o NodeMCU na rede Wifi
- * SSID e PASSWORD devem ser indicados nas variáveis
- */
+//função que conecta o NodeMCU na rede Wifi
 void reconnectWiFi() 
 {
   if(WiFi.status() == WL_CONNECTED)
     return;
-
   WiFi.begin(SSID, PASSWORD);
-
   while(WiFi.status() != WL_CONNECTED) {
     delay(100);
-    Serial.print(".");
   }
-
-  Serial.println();
-  Serial.print("Conectado com sucesso na rede: ");
-  Serial.println(SSID);
-  Serial.print("IP obtido: ");
-  Serial.println(WiFi.localIP());  
 }
-
+ 
 void initWiFi()
 {
   delay(10);
   Serial.print("Conectando-se na rede: ");
   Serial.println(SSID);
   Serial.println("Aguarde");
-
   reconnectWiFi();
 }
 
-void setup() {
- 
-  Serial.begin(115200);
+void devolveAngulo(){
 
-  Serial.println("nIniciando configuração WiFin");
-  initWiFi();
 
-  Serial.println("nIniciando configuração do MPU6050n");
-  initI2C();
-  initMPU();
-  checkMPU(MPU_ADDR);
+   for(i = 0; i < 300;i++)
+ {         
+     leiturasEixoY[i] = AcY;
+     leiturasEixoX[i] = AcX;
+     leiturasEixoZ[i] = AcZ;
+     readRawMPU(); 
+  }
+        
+ for(i = 0; i < 300; i++)
+ { 
+     somaLeiturasY =  somaLeiturasY + leiturasEixoY[i];
+     somaLeiturasX = somaLeiturasX +  leiturasEixoX[i];
+     somaLeiturasZ = somaLeiturasZ +  leiturasEixoZ[i];
+ }
+   
+  mediaLeiturasX = somaLeiturasX/300;
+  mediaLeiturasX = mediaLeiturasX / 100;
+  mediaLeiturasY = somaLeiturasY/300;
+  mediaLeiturasY = mediaLeiturasY / 100;
+  mediaLeiturasZ = somaLeiturasZ/300;
+  mediaLeiturasZ = mediaLeiturasZ / 100;
+           
+  somaLeiturasY = 0;
+  somaLeiturasX = 0;
+  somaLeiturasZ = 0;
+  
+  anguloX = atan2 (-mediaLeiturasY,-mediaLeiturasZ)   * 57.2957795 + 180;
     
 }
-void loop() {
 
-  readRawMPU();    // lê os dados do sensor
 
-        for(i = 0; i < 300;i++){         
-           leiturasEixoY[i] = AcY;
-           leiturasEixoX[i] = AcX;
-           leiturasEixoZ[i] = AcZ;
-           readRawMPU(); 
-           //leitura (); 
-           }
-        for(i = 0; i < 300; i++){ 
-           somaLeiturasY =  somaLeiturasY + leiturasEixoY[i];
-           somaLeiturasX = somaLeiturasX +  leiturasEixoX[i];
-           somaLeiturasZ = somaLeiturasZ +  leiturasEixoZ[i];
-          }
-            mediaLeiturasX = somaLeiturasX/300;
-            mediaLeiturasX = mediaLeiturasX / 100;
-            mediaLeiturasY = somaLeiturasY/300;
-            mediaLeiturasY = mediaLeiturasY / 100;
-            mediaLeiturasZ = somaLeiturasZ/300;
-            mediaLeiturasZ = mediaLeiturasZ / 100;
-            
-            Serial.print("Media eixo Y = ");
-            Serial.println(mediaLeiturasY);
-            Serial.print("Media eixo X = ");
-            Serial.println(mediaLeiturasX);
-            Serial.print("Media eixo Z = ");
-            Serial.println(mediaLeiturasZ);
-            
-            somaLeiturasY = 0;
-            somaLeiturasX = 0;
-            somaLeiturasZ = 0;
-  
-       Serial.print("Temperatura Cº "); Serial.println(Tmp/340.00+36.53);
-            
-            
-       anguloyxz = mediaLeiturasY/(sqrt( pow (mediaLeiturasX, 2) + (mediaLeiturasZ, 2)));
-       angulo = atan(anguloyxz);  
-            
-       Serial.print("Tangente =  ");
-       Serial.println( anguloyxz);
-       Serial.print("Angulo em RAD =  ");
-       Serial.println(angulo);
-                        
-delay(100);  
 
+
+void setup() 
+{
+  Serial.begin(115200);
+  Serial.println("nIniciando configuração WiFin");
+  initWiFi();
+  Serial.println("nIniciando configuração do MPU6050n");
+
+  initI2C();
+  initMPU();
+  checkMPU(MPU_ADDR); 
 }
+
+void loop() {
+    
+  readRawMPU();    // faz uma leitura do sensor antes de guardar nas variáveis
+
+  if (client.connect(server, 80)) {
+    devolveAngulo();
+    String postStr = apiKey;
+    postStr += "&field1=";
+    postStr += String(anguloX);
+    postStr += "&field2=";
+    postStr += String(Tmp/340.00+36.53);
+    plato = -0.004768616*anguloX*anguloX + 1.042135178*anguloX - 34.39633748;
+    plato = abs(plato);
+    postStr += "&field3=";
+    postStr += String(plato);
+    sg = 1 +(plato/(258.6 - ((plato/258.2)*227.1)));
+    postStr += "&field4=";
+    postStr += String(sg);
+     
+    
+    postStr += "\r\n\r\n";
+
+    //Uplad the postSting with temperature and Humidity information every
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Host: api.thingspeak.com\n");
+    client.print("Connection: close\n");
+    client.print("X-THINGSPEAKAPIKEY: " + apiKey + "\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("Content-Length: ");
+    client.print(postStr.length());
+    client.print("\n\n");
+    client.print(postStr);
+
+    Serial.print("Temperatura: ");
+    Serial.print(Tmp/340.00+36.53);
+    Serial.print("Angulo ");
+    Serial.print(anguloX);
+    Serial.println("% enviando para Thingspeak");
+  }
+  client.stop();
+
+  Serial.println("Aguardando nova leitura");
+  // thingspeak needs minimum 15 sec delay between updates
+  delay(15000);
+
+
+
+
+
+
+
+
+} 

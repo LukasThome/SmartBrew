@@ -1,7 +1,5 @@
-//Programa: Acelerometro com ESP8266 NodeMCU
 #include <ESP8266WiFi.h> // biblioteca para usar as funções de Wifi do módulo ESP8266
 #include <Wire.h>         // biblioteca de comunicação I2C
-#include <ArduinoJson.h>  // biblioteca JSON para sistemas embarcados
 
 /*
  * Definições de alguns endereços mais comuns do MPU6050
@@ -18,11 +16,10 @@ const int sda_pin = D5; // definição do pino I2C SDA
 const int scl_pin = D6; // definição do pino I2C SCL
 
 int i, eixo;
-float leiturasEixoY[300] = {}, mediaLeiturasX = 0, somaLeiturasX = 0, variacao = 0, valorAtual = 0, valorInicial = 0, leiturasEixoX[300], leiturasEixoZ[300],somaLeiturasZ = 0, somaLeiturasY = 0;  
+float leiturasEixoY[300] = {}, mediaLeiturasX = 0, somaLeiturasX = 0, variacao = 0, valorAtual = 0; 
+float valorInicial = 0, leiturasEixoX[300], leiturasEixoZ[300],somaLeiturasZ = 0, somaLeiturasY = 0;  
 float mediaLeiturasZ, mediaLeiturasY;
 float anguloyxz, angulo;
-
-bool led_state = false;
 
 // variáveis para armazenar os dados "crus" do acelerômetro
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ; 
@@ -30,33 +27,11 @@ int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
 // Definições da rede Wifi
 const char* SSID = "arduino";
 const char* PASSWORD = "12341234";
+WiFiServer server(80);
 
-// endereço IP local do Servidor Web instalado na Raspberry Pi 3
-// onde será exibida a página web
-const char* rpiHost = "192.168.0.24";  
-
-// servidor que disponibiliza serviço de geolocalização via IP    
-const char* IpApiHost = "ip-api.com";   
-
+  
 WiFiClient client;
-
-// construindo o objeto JSON que irá armazenar os dados do acelerômetro na função populateJSON()
-StaticJsonBuffer<300> jsonBuffer;
-JsonObject& object = jsonBuffer.createObject();
-JsonObject& data = object.createNestedObject("data");
-  
-JsonObject& accel = data.createNestedObject("accel");
-JsonObject& temp = data.createNestedObject("temp");
-JsonObject& gyro = data.createNestedObject("gyro");
-  
-JsonObject& accelX = accel.createNestedObject("accelX");
-JsonObject& accelY = accel.createNestedObject("accelY");
-JsonObject& accelZ = accel.createNestedObject("accelZ");
-
-JsonObject& gyroX = gyro.createNestedObject("gyroX");
-JsonObject& gyroY = gyro.createNestedObject("gyroY");
-JsonObject& gyroZ = gyro.createNestedObject("gyroZ");
-
+char c = client.read();
 
 void initI2C() 
 {
@@ -209,28 +184,14 @@ void readRawMPU()
 
   Tmp = Wire.read() << 8;
   Tmp |= Wire.read();
-/*
+
   GyX = Wire.read() << 8;
   GyX |= Wire.read();
   GyY = Wire.read() << 8;
   GyY |= Wire.read();
   GyZ = Wire.read() << 8;
   GyZ |= Wire.read(); 
-*/
-  //Serial.print("AcX = "); Serial.print(AcX);
-  //Serial.print(" | AcY = "); Serial.println(AcY);
-  //Serial.print(" | AcZ = "); Serial.print(AcZ);
-  //Serial.print(" | Tmp = "); Serial.println(Tmp/340.00+36.53);
-  //Serial.print(" | GyX = "); Serial.print(GyX);
-  //Serial.print(" | GyY = "); Serial.print(GyY);
-  //Serial.print(" | GyZ = "); Serial.println(GyZ);
-
- 
-  
-  
-  led_state = !led_state;
-  digitalWrite(LED_BUILTIN, led_state);         // pisca LED do NodeMCU a cada leitura do sensor
-  delay(10);                                        
+                                
 }
 
 /*
@@ -266,9 +227,8 @@ void initWiFi()
   reconnectWiFi();
 }
 
-
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+ 
   Serial.begin(115200);
 
   Serial.println("nIniciando configuração WiFin");
@@ -278,20 +238,34 @@ void setup() {
   initI2C();
   initMPU();
   checkMPU(MPU_ADDR);
-
-  //Serial.println("Enviando localização ao servidorn");
-//  makePOSTlocation();
-
-  //Serial.println("nConfiguração finalizada, iniciando loopn");  
+    
+  // Starting the web server
+  server.begin();
+  Serial.println("Web server running. Waiting for the ESP IP...");
+  delay(10000);
+  
+  // Printing the ESP IP address
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
-  readRawMPU();    // lê os dados do sensor
-  //populateJSON();  // transforma os dados em formato JSON
-  //makePOST();      // envia os dados ao servidor  
- 
+
+  // Listenning for new clients
+  WiFiClient client = server.available();
   
-   for(i = 0; i < 300;i++){         
+  if (client) {
+    Serial.println("New client");
+    // bolean to locate when the http request ends
+    boolean blank_line = true;
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        
+        if (c == '\n' && blank_line) {
+            //Leitura dos sensores
+             readRawMPU();    // lê os dados do sensor
+
+        for(i = 0; i < 300;i++){         
            leiturasEixoY[i] = AcY;
            leiturasEixoX[i] = AcX;
            leiturasEixoZ[i] = AcZ;
@@ -309,31 +283,79 @@ void loop() {
             mediaLeiturasY = mediaLeiturasY / 100;
             mediaLeiturasZ = somaLeiturasZ/300;
             mediaLeiturasZ = mediaLeiturasZ / 100;
-            
+            /*
             Serial.print("Media eixo Y = ");
             Serial.println(mediaLeiturasY);
             Serial.print("Media eixo X = ");
             Serial.println(mediaLeiturasX);
             Serial.print("Media eixo Z = ");
             Serial.println(mediaLeiturasZ);
-            
+            */
             somaLeiturasY = 0;
             somaLeiturasX = 0;
             somaLeiturasZ = 0;
- 
- 
-            Serial.print(" | Temp = "); Serial.println(Tmp/340.00+36.53);
+  
+       //Serial.print("Temperatura Cº "); Serial.println(Tmp/340.00+36.53);
             
             
-            anguloyxz = mediaLeiturasY/(sqrt( pow (mediaLeiturasX, 2) + (mediaLeiturasZ, 2)));
-            angulo = atan(anguloyxz);  
+       anguloyxz = mediaLeiturasY/(sqrt( pow (mediaLeiturasX, 2) + (mediaLeiturasZ, 2)));
+       angulo = atan(anguloyxz);  
             
-            Serial.println("Angulo =  : ");
-            Serial.println( anguloyxz);
-            Serial.println("Angulo em Graus =  : ");
-            Serial.println(angulo);
+       Serial.print("Tangente =  ");
+       Serial.println( anguloyxz);
+       Serial.print("Angulo em RAD =  ");
+       Serial.println(angulo);
+                          
+       delay(100);  
+                    
+       }
             
-            
-            
-            delay(100);  
-}
+        else{
+              
+              // You can delete the following Serial.print's, it's just for debugging purposes
+              Serial.print("Eixo X ");
+              Serial.print(mediaLeiturasX);
+              Serial.print("Eixo Y ");
+              Serial.print(mediaLeiturasY);
+              Serial.print("Eixo Z ");
+              Serial.print(mediaLeiturasZ);
+              Serial.print(" %\t Temperatura: ");
+              Serial.print(Tmp/340.00+36.53);
+              Serial.print(" *C ");
+            }
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-Type: text/html");
+            client.println("Connection: close");
+            client.println();
+            // your actual web page that displays temperature and humidity
+            client.println("<!DOCTYPE HTML>");
+            client.println("<html>");
+            client.println("<head></head><body><h1>ESP8266 - Temperatura</h1><h3>Temperatura em Celsius: ");
+            client.println(Tmp/340.00+36.53);
+            client.println("*C</h3><h3>Eixo X ");
+            client.println(mediaLeiturasX);
+            client.println("*C</h3><h3>Eixo Y");
+            client.println(mediaLeiturasY);
+            client.println("*C</h3><h3>Eixo Z");
+            client.println(mediaLeiturasZ);
+
+            client.println("%</h3><h3>");
+            client.println("</body></html>");     
+            break;
+        }
+        if (c == '\n') {
+          // when starts reading a new line
+          blank_line = true;
+        }
+        else if (c != '\r') {
+          // when finds a character on the current line
+          blank_line = false;
+        }
+      }
+    }  
+    // closing the client connection
+    delay(1);
+    client.stop();
+    Serial.println("Client disconnected.");
+  }  
+  
